@@ -90,7 +90,7 @@ class ControlFlowEmitter {
 
             const target = term.target;
             if (target === follow || target === undefined) return stack;
-            const redirected = this.#transfer(target, follow, loop);
+            const redirected = this.#transfer(target, follow, loop, stack);
             if (redirected === null) return null;
             stack = this.#materialize(redirected, stack);
             block = redirected;
@@ -141,7 +141,7 @@ class ControlFlowEmitter {
         }
 
         if (target === follow || target === this.#graph.exit) return this.#slots(target);
-        const next = this.#transfer(target, follow, loop);
+        const next = this.#transfer(target, follow, loop, this.#slots(target));
         if (next === null) return null;
         return this.#region(next, follow, loop, this.#slots(target));
     }
@@ -214,6 +214,11 @@ class ControlFlowEmitter {
         this.#emitter.dedent();
         this.#emitter.line(`} catch (${exception.variable}) {`);
         this.#emitter.indent();
+        // AVM2 restores the scope stack on catch: the handler rebuilds it from
+        // scratch (its first pushscope instructions push `this`, the activation
+        // and the catch scope). Drop the try's scopes first so getscopeobject
+        // indices land on the catch scope.
+        this.#emitter.line("if (typeof _scope !== \"undefined\") _scope.length = 0;");
         this.#region(exception.handlerStart, exception.handlerEnd, loop, [exception.variable]);
         this.#emitter.dedent();
         this.#emitter.line("}");
@@ -227,12 +232,23 @@ class ControlFlowEmitter {
             return;
         }
         if (loop && loop.exits.has(block)) {
-            this.#emitter.line("break;");
+            this.#transfer(block, target, loop, stack);
             return;
         }
         const result = this.#region(block, target, loop, stack);
         if (result !== null && result !== undefined && target !== this.#graph.exit) {
             this.#materialize(target, result);
+        }
+    }
+
+    // A loop exit block that is not the loop's own continuation still holds code
+    // (typically a `return`) that has to run. Emit it in place, then leave the
+    // loop when it falls through to the join.
+    #emitExit(block, target, stack) {
+        const result = this.#region(block, target, null, stack);
+        if (result !== null && result !== undefined && target !== this.#graph.exit) {
+            this.#materialize(target, result);
+            this.#emitter.line("break;");
         }
     }
 
@@ -282,7 +298,7 @@ class ControlFlowEmitter {
         return slots;
     }
 
-    #transfer(block, follow, loop) {
+    #transfer(block, follow, loop, stack = []) {
         if (block === undefined || block === null) return null;
         if (block === follow || block === this.#graph.exit) return null;
         if (loop && block === loop.header) {
@@ -290,7 +306,11 @@ class ControlFlowEmitter {
             return null;
         }
         if (loop && loop.exits.has(block)) {
-            this.#emitter.line("break;");
+            // `break` only lands on the loop's continuation; an exit block that
+            // is a different block carries its own statements and must be
+            // emitted here, otherwise they would be dropped.
+            if (block === loop.follow) this.#emitter.line("break;");
+            else this.#emitExit(block, follow, stack);
             return null;
         }
         return block;

@@ -218,6 +218,15 @@ class GlContext {
         gl.clear(gl.COLOR_BUFFER_BIT | gl.STENCIL_BUFFER_BIT);
     }
 
+    // Reads a rectangle of a bound single-sample target back into a fresh buffer (RGBA,
+    // premultiplied, GL's bottom-left origin). Used by `BitmapData.draw`.
+    readPixels(target, x, y, width, height) {
+        const out = new Uint8Array(width * height * 4);
+        this.bindTarget(target);
+        this.gl.readPixels(x, y, width, height, this.gl.RGBA, this.gl.UNSIGNED_BYTE, out);
+        return out;
+    }
+
     // Uploads an image-like source as a premultiplied RGBA texture.
     createTexture(source, { linear = true, repeat = false, mipmaps = false } = {}) {
         const gl = this.gl;

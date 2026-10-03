@@ -13,13 +13,20 @@ canvas.width = 960;
 canvas.height = 550;
 document.body.appendChild(canvas);
 
+// TCP sockets the SWF opens are tunnelled through a WebSocket bridge: a
+// `Socket.connect(host, port)` matching an entry below connects to `proxyUrl`
+// (passing the target host/port) instead of opening a raw TCP connection. A
+// single wildcard entry routes every target through the local bridge.
+const socketProxy = [
+    { host: "*", proxyUrl: "ws://localhost:8181" },
+];
+
 const stage = new Stage();
-const loader = new MovieLoader(stage);
+const loader = new MovieLoader(stage, location.href, { socketProxy });
 
 // No GPU -> this throws right here.
 const player = new Player(stage, canvas);
 const { root } = await loader.loadRoot(movieUrl, player);
 player.start();
 
-globalThis.runtime = { stage, loader, player, root };
 console.log("[boot] movie running", root);

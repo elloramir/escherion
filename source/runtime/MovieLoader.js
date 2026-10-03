@@ -6,6 +6,7 @@ import Domain from "./Domain.js";
 import LoaderInfo from "../flash/display/LoaderInfo.js";
 import MovieClip from "../flash/display/MovieClip.js";
 import Timeline from "../flash/display/Timeline.js";
+import ApplicationDomain from "../flash/system/ApplicationDomain.js";
 
 // Loads movies at runtime: parses the container, transpiles its ABC, evaluates
 // the resulting module and mounts its document class. Every movie, root or
@@ -16,16 +17,30 @@ class MovieLoader {
 
     #stage;
     #baseUrl;
+    #socketProxy;
 
-    constructor(stage, baseUrl = location.href) {
+    // `socketProxy` maps a SWF's `Socket.connect(host, port)` to a WebSocket
+    // bridge: `[{ host, port, proxyUrl }, ...]`.
+    constructor(stage, baseUrl = location.href, { socketProxy = [] } = {}) {
         this.#stage = stage;
         this.#baseUrl = baseUrl;
+        this.#socketProxy = Array.isArray(socketProxy) ? socketProxy : [];
     }
 
     // Relative URLs resolve against the page, so a locally served SWF keeps its
     // original relative loads ("gamefiles/...") against the current origin.
     resolve(url) {
         return new URL(String(url), this.#baseUrl).href;
+    }
+
+    // The bridge configured for a target, or null when none is mapped. `host`
+    // (and `port`) may be "*" to match any target; the bridge itself receives
+    // the real target in its query string.
+    socketProxyFor(host, port) {
+        const hostMatches = (entry) => entry.host === "*" || String(entry.host) === String(host);
+        const portMatches = (entry) => entry.port === undefined || entry.port === "*"
+            || Number(entry.port) === Number(port);
+        return this.#socketProxy.find((entry) => hostMatches(entry) && portMatches(entry)) ?? null;
     }
 
     // Loads and mounts the top-level movie; `player` (when given) takes ownership
@@ -43,12 +58,13 @@ class MovieLoader {
         return { root, swf, domain };
     }
 
-    // Loads a nested SWF under a Loader (the game's own `Loader.load` path).
-    async loadNested({ loader, url, bytes = null }) {
+    // Loads a nested SWF under a Loader (the game's own `Loader.load` path). The
+    // LoaderContext's application domain receives the loaded movie's classes.
+    async loadNested({ loader, url, bytes = null, applicationDomain = null }) {
         const swf = bytes ? await SwfFile.parse(bytes, url) : await SwfFile.load(url);
         const loaderInfo = loader.contentLoaderInfo;
         loaderInfo.url = url;
-        const { DocumentClass, domain } = await this.#compile(swf);
+        const { DocumentClass, domain } = await this.#compile(swf, applicationDomain);
         const root = new DocumentClass();
         loaderInfo.content = root;
         loader.content = root;
@@ -59,8 +75,11 @@ class MovieLoader {
 
     // Transpiles the movie's ABC and evaluates the module, returning the document
     // class bound to a fresh Domain.
-    async #compile(swf) {
+    async #compile(swf, applicationDomain = null) {
         const domain = new Domain(this, Dictionary.of(swf.tags));
+        // Classes this movie defines are recorded here. A nested movie inherits
+        // the LoaderContext's domain; the root movie gets its own.
+        domain.applicationDomain = applicationDomain ?? new (domain.bind(ApplicationDomain))();
         let DocumentClass = null;
         if (swf.abcData) {
             const abc = AbcFile.parse(swf.abcData);
@@ -99,9 +118,9 @@ class MovieLoader {
 
     static #flashBase() {
         // Browser: an absolute http(s) origin keeps imported modules resolvable
-        // from a blob URL. Node (tests): fall back to a file URL, since a data
-        // URL module cannot resolve a relative import.
-        if (typeof location !== "undefined" && location.origin && location.origin !== "null") {
+        // from a blob URL. Node (tests): fall back to a file URL, since neither a
+        // data URL nor a blob URL can resolve a relative or http: import.
+        if (typeof document !== "undefined" && location.origin && location.origin !== "null") {
             return `${location.origin}/source/flash`;
         }
         return new URL("../flash", import.meta.url).href;

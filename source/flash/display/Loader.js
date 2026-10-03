@@ -21,15 +21,18 @@ class Loader extends DisplayObjectContainer {
     }
 
     load(request, context = null) {
-        void context;
         const host = this.constructor.domain.host;
         const info = this.contentLoaderInfo;
         const url = host.resolve(request?.url ?? request);
         info.url = url;
+        const applicationDomain = context?.applicationDomain ?? null;
         info.dispatchEvent(new Event(Event.OPEN));
 
-        Promise.resolve(host.loadNested({ loader: this, url }))
+        Promise.resolve(host.loadNested({ loader: this, url, applicationDomain }))
             .then(() => {
+                // `init` fires once the loaded movie's properties are available
+                // (its first frame is built), before `complete`.
+                info.dispatchEvent(new Event(Event.INIT));
                 info.dispatchEvent(new ProgressEvent(ProgressEvent.PROGRESS));
                 info.dispatchEvent(new Event(Event.COMPLETE));
             })

@@ -1,5 +1,6 @@
 import Dictionary from "../../swf/Dictionary.js";
 import FontRegistry from "../FontRegistry.js";
+import ColorTransform from "../ColorTransform.js";
 import BitmapCache from "../bitmap/BitmapCache.js";
 import GlContext from "./core/GlContext.js";
 import Matrix from "./core/Matrix.js";
@@ -55,6 +56,8 @@ class GlRenderer {
     #bakes;
     #bitmapCache;
     #nineMatrix = new Float64Array(6);
+    #rasterMatrix = new Float64Array(6);
+    #rasterCt = new Float32Array(8);
     #lastSig = null;
     #lastWidth = 0;
     #lastHeight = 0;
@@ -156,6 +159,96 @@ class GlRenderer {
         this.#drawInfo(rootInfo, state.rootMatrix, state.identityCt, 1, 0);
         gl.disable(gl.STENCIL_TEST);
         this.#groupCache.sweep();
+    }
+
+    // Rasterizes `node` (and its subtree) into a fresh Flash-order (A,R,G,B) pixel buffer of
+    // `width`x`height`, for `flash.display.BitmapData.draw`. It runs one offscreen pass through the
+    // same draw path as `render`, so shapes, gradients, text and bitmaps match what appears on
+    // screen. Returns null when nothing can be rendered (no context, empty area).
+    drawToPixels(node, matrix, colorTransform, width, height, clipRect = null) {
+        if (this.#ctx.lost || node === null || node === undefined) return null;
+        const w = Math.max(0, Math.floor(Number(width) || 0));
+        const h = Math.max(0, Math.floor(Number(height) || 0));
+        if (w === 0 || h === 0) return null;
+        const ctx = this.#ctx;
+        const state = this.#state;
+        // The node's movie supplies the character/font dictionary; walk to the movie root (the only
+        // node carrying its SWF) so nested assets resolve.
+        let tagged = node;
+        while (tagged !== null && tagged !== undefined && tagged.swf?.tags === undefined) {
+            tagged = tagged.parent ?? null;
+        }
+        const dictionary = tagged?.swf?.tags ? Dictionary.of(tagged.swf.tags) : Dictionary.empty;
+        this.#scene.beginFrame();
+        const info = this.#scene.prepare(node, dictionary);
+        if (info === null) return null;
+
+        const target = ctx.acquireTarget(w, h, { stencil: true, msaa: false });
+        const saved = {
+            clipBits: state.clipBits, clipLevel: state.clipLevel, mode: state.mode,
+            blend: state.blendMode, target: ctx.currentTarget, w2t: Float64Array.from(state.w2t),
+        };
+        state.setTarget(target, target.width, target.height);
+        ctx.gl.stencilMask(0xff);
+        state.clipBits = 0;
+        state.clipLevel = 0;
+        state.mode = MODE_COLOR;
+        this.#blend.set("normal");
+        const savedInherit = state.inheritBlend;
+        state.inheritBlend = null;
+        ctx.gl.enable(ctx.gl.STENCIL_TEST);
+        if (clipRect) {
+            ctx.gl.enable(ctx.gl.SCISSOR_TEST);
+            ctx.gl.scissor(
+                Math.floor(Number(clipRect.x) || 0), Math.floor(Number(clipRect.y) || 0),
+                Math.max(0, Math.floor(Number(clipRect.width) || 0)),
+                Math.max(0, Math.floor(Number(clipRect.height) || 0)),
+            );
+        }
+        ctx.clear(0, 0, 0, 0);
+        const base = this.#rasterMatrix;
+        base[0] = Number(matrix?.a ?? 1); base[1] = Number(matrix?.b ?? 0);
+        base[2] = Number(matrix?.c ?? 0); base[3] = Number(matrix?.d ?? 1);
+        base[4] = Number(matrix?.tx ?? 0); base[5] = Number(matrix?.ty ?? 0);
+        const normalized = colorTransform ? ColorTransform.normalize(colorTransform) : info.ct;
+        const ct = this.#rasterCt;
+        ct[0] = normalized.redMul; ct[1] = normalized.greenMul;
+        ct[2] = normalized.blueMul; ct[3] = normalized.alphaMul;
+        ct[4] = normalized.redAdd / 255; ct[5] = normalized.greenAdd / 255;
+        ct[6] = normalized.blueAdd / 255; ct[7] = normalized.alphaAdd / 255;
+        try {
+            this.#drawBody(info, base, ct, info.alpha, 0);
+        } finally {
+            state.inheritBlend = savedInherit;
+            state.clipBits = saved.clipBits;
+            state.clipLevel = saved.clipLevel;
+            state.mode = saved.mode;
+        }
+        ctx.unbindTextures();
+        const raw = ctx.readPixels(target, 0, 0, w, h);
+        ctx.release(target);
+        ctx.forgetBindings();
+        ctx.resetState();
+        state.setTarget(saved.target, state.canvas.width, state.canvas.height);
+        state.w2t.set(saved.w2t);
+        this.#blend.set(saved.blend);
+        ctx.gl.enable(ctx.gl.STENCIL_TEST);
+        return GlRenderer.#toArgb(raw, w, h);
+    }
+
+    // GL returns premultiplied RGBA in bottom-left order; the renderer's target maps device y=0 to
+    // framebuffer row 0, so the rows already run top-to-bottom. BitmapData stores straight A,R,G,B.
+    static #toArgb(rgba, width, height) {
+        const out = new Uint8ClampedArray(width * height * 4);
+        for (let index = 0; index < out.length; index += 4) {
+            const a = rgba[index + 3];
+            const scale = a > 0 && a < 255 ? 255 / a : 1;
+            out[index] = a;
+            out[index + 1] = Math.min(255, Math.round(rgba[index] * scale));
+            out[index + 2] = Math.min(255, Math.round(rgba[index + 1] * scale));
+            out[index + 3] = Math.min(255, Math.round(rgba[index + 2] * scale));
+        }
+        return out;
     }
 
     // Forces the next `render` to redraw even when the scene signature is unchanged (tools/debug).

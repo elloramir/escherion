@@ -85,8 +85,9 @@ class PropertyTranslator {
 
     setProperty(multinameIndex) {
         if (Names.hasRuntimeName(this.#pool, multinameIndex)) {
-            const key = this.#stack.pop();
+            // Stack is [object, name, value] with the value on top.
             const value = this.#stack.pop();
+            const key = this.#stack.pop();
             const object = this.#stack.pop();
             return `${Expressions.paren(object)}[${key}] = ${value};`;
         }
@@ -112,9 +113,9 @@ class PropertyTranslator {
 
     setSuper(multinameIndex) {
         if (Names.hasRuntimeName(this.#pool, multinameIndex)) {
-            const key = this.#stack.pop();
+            // Stack is [name, value] with the value on top.
             const value = this.#stack.pop();
-            this.#stack.pop();
+            const key = this.#stack.pop();
             return `super[${key}] = ${value};`;
         }
         const value = this.#stack.pop();
@@ -133,7 +134,15 @@ class PropertyTranslator {
     construct(argc) {
         const args = this.#stack.popMany(argc);
         const cls = this.#stack.pop();
-        return this.#push(`new ${Expressions.paren(cls)}(${args.join(", ")})`);
+        return this.#push(`new ${Expressions.paren(this.#native(cls))}(${args.join(", ")})`);
+    }
+
+    // A native class reached through `findpropstrict` is a bare identifier; use
+    // its JS expression (e.g. `XML` -> `domain.XML`).
+    #native(expression) {
+        if (typeof expression !== "string" || !/^[A-Za-z_$][A-Za-z0-9_$]*$/.test(expression)) return expression;
+        const spec = this.#linker?.resolve(`::${expression}`);
+        return spec?.kind === "native" ? spec.expression : expression;
     }
 
     callProperty(instruction) {
@@ -183,7 +192,7 @@ class PropertyTranslator {
     constructProperty(instruction) {
         const args = this.#stack.popMany(instruction.operands[1]);
         const receiver = this.#stack.pop();
-        const member = this.#member(receiver, instruction.operands[0]);
+        const member = this.#native(this.#member(receiver, instruction.operands[0]));
         return this.#push(`new ${member}(${args.join(", ")})`);
     }
 

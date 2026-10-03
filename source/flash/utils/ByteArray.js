@@ -10,19 +10,26 @@ class ByteArray {
     }
 
     #bytes;
+    // The logical length (bytes written), distinct from the Uint8Array capacity.
+    #length = 0;
 
     get length() {
-        return this.#bytes.length;
+        return this.#length;
     }
 
     set length(value) {
-        const next = new Uint8Array(Math.max(0, value | 0));
-        next.set(this.#bytes.subarray(0, next.length));
-        this.#bytes = next;
+        const next = Math.max(0, value | 0);
+        if (next > this.#bytes.length) this.#ensure(next - this.position);
+        this.#length = next;
     }
 
     get bytesAvailable() {
-        return Math.max(0, this.#bytes.length - this.position);
+        return Math.max(0, this.#length - this.position);
+    }
+
+    #advance(count) {
+        this.position += count;
+        if (this.position > this.#length) this.#length = this.position;
     }
 
     get #view() {
@@ -39,6 +46,7 @@ class ByteArray {
     clear() {
         this.#bytes = new Uint8Array(0);
         this.position = 0;
+        this.#length = 0;
     }
 
     readBoolean() {
@@ -94,7 +102,7 @@ class ByteArray {
     }
 
     readBytes(target, offset = 0, length = 0) {
-        const count = length || (this.#bytes.length - this.position);
+        const count = length || (this.#length - this.position);
         const slice = this.#bytes.subarray(this.position, this.position + count);
         this.position += count;
         target.writeBytes(slice, offset, count);
@@ -117,37 +125,38 @@ class ByteArray {
 
     writeByte(value) {
         this.#ensure(1);
-        this.#bytes[this.position++] = value & 0xff;
+        this.#bytes[this.position] = value & 0xff;
+        this.#advance(1);
     }
 
     writeShort(value) {
         this.#ensure(2);
         this.#view.setInt16(this.position, value, this.endian === "littleEndian");
-        this.position += 2;
+        this.#advance(2);
     }
 
     writeInt(value) {
         this.#ensure(4);
         this.#view.setInt32(this.position, value, this.endian === "littleEndian");
-        this.position += 4;
+        this.#advance(4);
     }
 
     writeUnsignedInt(value) {
         this.#ensure(4);
         this.#view.setUint32(this.position, value >>> 0, this.endian === "littleEndian");
-        this.position += 4;
+        this.#advance(4);
     }
 
     writeFloat(value) {
         this.#ensure(4);
         this.#view.setFloat32(this.position, value, this.endian === "littleEndian");
-        this.position += 4;
+        this.#advance(4);
     }
 
     writeDouble(value) {
         this.#ensure(8);
         this.#view.setFloat64(this.position, value, this.endian === "littleEndian");
-        this.position += 8;
+        this.#advance(8);
     }
 
     writeBytes(source, offset = 0, length = 0) {
@@ -155,7 +164,7 @@ class ByteArray {
         const count = length || data.length - offset;
         this.#ensure(count);
         this.#bytes.set(data.subarray(offset, offset + count), this.position);
-        this.position += count;
+        this.#advance(count);
     }
 
     writeUTF(value) {
@@ -168,8 +177,25 @@ class ByteArray {
         this.writeBytes(new TextEncoder().encode(String(value)));
     }
 
+    // AMF3 round-trip for the only use the game makes of it: deep-copying plain
+    // data (`copyObj`). The bytes are a length-prefixed JSON document, so any
+    // value JSON survives a writeObject/readObject pair intact.
+    writeObject(value) {
+        const bytes = new TextEncoder().encode(JSON.stringify(value === undefined ? null : value));
+        this.writeInt(bytes.length);
+        this.writeBytes(bytes);
+    }
+
+    readObject() {
+        const length = this.readInt();
+        const json = new TextDecoder().decode(this.#bytes.subarray(this.position, this.position + length));
+        this.position += length;
+        if (this.position > this.#length) this.#length = this.position;
+        return JSON.parse(json);
+    }
+
     toString() {
-        return new TextDecoder().decode(this.#bytes);
+        return new TextDecoder().decode(this.#bytes.subarray(0, this.#length));
     }
 
     compress() {
@@ -181,7 +207,7 @@ class ByteArray {
     }
 
     get rawBytes() {
-        return this.#bytes;
+        return this.#bytes.subarray(0, this.#length);
     }
 }
 

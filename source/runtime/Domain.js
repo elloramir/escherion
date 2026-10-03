@@ -17,6 +17,10 @@ class Domain {
     dictionary;
     // Character id -> class linked by a SymbolClass entry.
     symbols = new Map();
+    // The ApplicationDomain this movie's classes belong to. A movie loaded with
+    // a LoaderContext records its classes in that context's domain so callers can
+    // resolve them (e.g. an item SWF's linked class).
+    applicationDomain = null;
 
     #classes = new Map();
     #bound = new Map();
@@ -48,6 +52,13 @@ class Domain {
 
     defineClass(name, classObject) {
         this.#classes.set(name, classObject);
+        // Loaded movies share their classes through the domain they were loaded
+        // into, keyed by both the qualified and simple name.
+        if (this.applicationDomain) {
+            this.applicationDomain.define(name, classObject);
+            const simple = name.split(/::|\./).pop();
+            if (simple !== name) this.applicationDomain.define(simple, classObject);
+        }
         return classObject;
     }
 
@@ -85,6 +96,18 @@ class Domain {
 
     trace(...args) {
         console.log("[trace]", ...args);
+    }
+
+    // Minimal `flash.utils.describeType`: only the reflection the game reads is
+    // provided (the constants of a class, via `xml.constant["@name"]`).
+    describeType(type) {
+        const names = [];
+        for (const key of Object.keys(type ?? {})) {
+            if (typeof type[key] === "number") names.push(key);
+        }
+        const xml = new XML("<type/>");
+        xml.constant = { "@name": new XMLList(names) };
+        return xml;
     }
 
     __coerce(value, type) {
@@ -128,7 +151,15 @@ class Domain {
     }
 
     #keys(object) {
+        if (object instanceof XML) return this.#children(object).map((_, index) => String(index));
+        if (object instanceof XMLList) return Object.keys(object).filter((key) => /^\d+$/.test(key));
         return object === null || object === undefined ? [] : Object.keys(object);
+    }
+
+    // An XML iterates its children, an XMLList its own numeric slots; everything
+    // else follows `Object.keys` (XML's internals must never leak into a loop).
+    #children(xml) {
+        return xml.__node?.children ? [...xml.__node.children] : [];
     }
 
     __hasNext(object, index) {
@@ -145,6 +176,11 @@ class Domain {
     }
 
     __nextValue(object, index) {
+        if (object instanceof XML) {
+            const child = this.#children(object)[index - 1];
+            return child ? new XML(child) : null;
+        }
+        if (object instanceof XMLList) return object.item(index - 1);
         return object?.[this.#keys(object)[index - 1]] ?? null;
     }
 

@@ -220,6 +220,8 @@ class Timeline {
     }
 
     static #sync(clip, states) {
+        // Only a DisplayObjectContainer holds a timeline's children.
+        if (!Array.isArray(clip.children)) return;
         const byDepth = new Map();
         // Children a script added are not the timeline's to remove or replace.
         for (const child of [...clip.children]) {

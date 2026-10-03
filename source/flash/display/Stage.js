@@ -13,6 +13,9 @@ class Stage extends DisplayObjectContainer {
         this.pointer = null;
         // Measures a text field's layout; the player sets it to its renderer's.
         this.textMetrics = null;
+        // Rasterizes a display object into a BitmapData; the player wires its renderer here so
+        // `flash.display.BitmapData.draw` works without the VM importing the renderer.
+        this.bitmapRasterizer = null;
         this.frameRate = 24;
         this.align = "TL";
         this.scaleMode = "noScale";

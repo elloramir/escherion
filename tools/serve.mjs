@@ -10,6 +10,7 @@ import express from "express";
 import chokidar from "chokidar";
 import { WebSocketServer } from "ws";
 import { createProxyMiddleware } from "http-proxy-middleware";
+import { startSocketProxy } from "./socket-proxy.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = Number(process.env.PORT ?? 8080);
@@ -65,3 +66,6 @@ watcher.on("all", () => {
 });
 
 server.listen(PORT, () => console.log(`serving ${ROOT} on http://localhost:${PORT} (proxy ${AQW})`));
+
+// TCP sockets the SWF opens are tunnelled through this WebSocket bridge.
+startSocketProxy();

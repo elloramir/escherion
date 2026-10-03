@@ -23,7 +23,7 @@ const NATIVE = new Map([
 
 // Flash classes that reach the player through the movie's domain: the movie
 // uses `domain.bind(Class)` instead of the class itself.
-const SERVICE_CLASSES = new Set(["Loader", "URLLoader", "ApplicationDomain"]);
+const SERVICE_CLASSES = new Set(["Loader", "URLLoader", "ApplicationDomain", "Socket"]);
 
 // Resolves an ABC qualified name to what provides it: a hand-written flash
 // class under `flash/` (imported by the generated module), a class of the game

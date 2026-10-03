@@ -26,13 +26,15 @@ class ClassTranspiler {
     #index;
     #pool;
     #linker;
+    #closure;
     #bodies = new Map();
 
-    constructor(abcFile, classIndex, linker) {
+    constructor(abcFile, classIndex, linker, closure = null) {
         this.#abc = abcFile;
         this.#index = classIndex;
         this.#pool = abcFile.constantPool;
         this.#linker = linker;
+        this.#closure = closure;
         for (const body of abcFile.methodBodies) this.#bodies.set(body.methodIndex, body);
     }
 
@@ -119,6 +121,7 @@ class ClassTranspiler {
             new MethodTranspiler(this.#abc, body, {
                 receiver: "this",
                 linker: this.#linker,
+                closure: this.#closure,
             }).writeInto(emitter, { kind: "constructor" });
         } catch (error) {
             emitter.comment(`constructor unsupported: ${error.message}`);
@@ -133,6 +136,7 @@ class ClassTranspiler {
             new MethodTranspiler(this.#abc, this.#bodies.get(cinitIndex), {
                 receiver: "this",
                 linker: this.#linker,
+                closure: this.#closure,
             }).writeInto(emitter, { name: "__cinit", kind: "method", static: true });
         } catch (error) {
             emitter.comment(`static initializer unsupported: ${error.message}`);
@@ -153,6 +157,7 @@ class ClassTranspiler {
                     // global functions still fall back inside __call.
                     receiver: "this",
                     linker: this.#linker,
+                    closure: this.#closure,
                 }).writeInto(emitter, { name, kind, static: isStatic });
             } catch (error) {
                 emitter.comment(`${name} unsupported: ${error.message}`);

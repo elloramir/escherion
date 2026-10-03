@@ -1,6 +1,7 @@
 import Names from "./Names.js";
 import SourceWriter from "./SourceWriter.js";
 import ClassTranspiler from "./ClassTranspiler.js";
+import MethodTranspiler from "./MethodTranspiler.js";
 import Linker from "./Linker.js";
 
 // Turns a parsed `AbcFile` into one movie factory:
@@ -14,6 +15,8 @@ class Transpiler {
     #abc;
     #linker;
     #indexByName = new Map();
+    #bodies = new Map();
+    #closures = new Map();
 
     constructor(abcFile, options = {}) {
         this.#abc = abcFile;
@@ -22,6 +25,31 @@ class Transpiler {
             const qualified = Names.qualifiedNameOf(abcFile.constantPool, instance.nameIndex);
             this.#indexByName.set(qualified, index);
         });
+        for (const body of abcFile.methodBodies) this.#bodies.set(body.methodIndex, body);
+    }
+
+    // Transpiles a `newfunction` method body into an inline arrow function. The
+    // arrow keeps the creating method's `this` (AS3 closures are bound), and its
+    // own `_scope`/params.
+    #closure(index) {
+        const cached = this.#closures.get(index);
+        if (cached !== undefined) return cached;
+        const body = this.#bodies.get(index);
+        if (!body) return `domain.__function(${index})`;
+        const writer = new SourceWriter();
+        try {
+            new MethodTranspiler(this.#abc, body, {
+                receiver: "this",
+                linker: this.#linker,
+                closure: (inner) => this.#closure(inner),
+            }).writeInto(writer, { kind: "closure" });
+        } catch (error) {
+            console.warn(`[transpiler] closure ${index} unsupported: ${error.message}`);
+            return `domain.__function(${index})`;
+        }
+        const source = writer.toString().trim();
+        this.#closures.set(index, source);
+        return source;
     }
 
     static transpile(abcFile, documentClass, options = {}) {
@@ -44,9 +72,10 @@ class Transpiler {
         for (const [symbol, { service }] of imports) {
             if (service) emitter.line(`const ${symbol} = domain.bind(Flash${symbol});`);
         }
+        const closure = (index) => this.#closure(index);
         for (const index of order) {
             const body = new SourceWriter();
-            new ClassTranspiler(this.#abc, index, this.#linker).writeClass(body);
+            new ClassTranspiler(this.#abc, index, this.#linker, closure).writeClass(body);
             emitter.adopt(body);
             emitter.blank();
         }
@@ -63,7 +92,10 @@ class Transpiler {
             const name = classTranspiler.name();
             emitter.line(`try { ${name}.__cinit(); } catch (error) { console.warn("${name} static initializer failed:", error); }`);
         }
-        emitter.line(`return ${this.#documentName(documentClass)};`);
+        // A movie with no document class returns null so the loader mounts a
+        // plain MovieClip for its timeline (the ABC classes are still registered).
+        const documentName = documentClass ? documentClass.split(/::|\./).pop() : null;
+        emitter.line(documentName ? `return ${documentName};` : "return null;");
         emitter.dedent();
         emitter.line("}");
         return emitter.toString();

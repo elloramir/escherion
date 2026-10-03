@@ -40,7 +40,15 @@ class NaturalLoops {
         }
         // The post-dominator of the header can land inside the loop when the
         // exit test is nested; the loop's own exit edge is the real follow.
-        loop.follow = loop.exits.size === 1 ? [...loop.exits][0] : immediatePostDominator[header];
+        // With several exits, prefer the single one that continues into the
+        // enclosing code (the others terminate with return/throw): that is where
+        // `break` lands, even when the whole loop's post-dominator is the graph
+        // exit (an inner loop whose only non-return exit re-enters an outer loop).
+        const exits = [...loop.exits];
+        const continuing = exits.filter((exit) => (successors[exit]?.length ?? 0) > 0);
+        if (exits.length === 1) loop.follow = exits[0];
+        else if (continuing.length === 1) loop.follow = continuing[0];
+        else loop.follow = immediatePostDominator[header];
     }
 }
 

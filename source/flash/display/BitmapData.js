@@ -76,9 +76,18 @@ class BitmapData {
         }
     }
 
-    // The compositor lives in the renderer; until it is wired, the bitmap stays as-is.
-    draw() {
-        console.warn("flash.display.BitmapData.draw: not implemented");
+    // Renders `source` (a display object) through the player's renderer, honouring the transform,
+    // colour transform and clip rectangle. The renderer is reached through the stage so the flash
+    // layer never imports it; without one the buffer is left untouched.
+    draw(source, matrix = null, colorTransform = null, blendMode = null, clipRect = null, smoothing = false) {
+        void blendMode;
+        const rasterizer = source?.stage?.bitmapRasterizer;
+        if (typeof rasterizer !== "function") {
+            console.warn("flash.display.BitmapData.draw: no rasterizer available");
+            return;
+        }
+        const pixels = rasterizer(this, source, matrix, colorTransform, clipRect, smoothing);
+        if (pixels && this.data) this.data.set(pixels);
     }
 
     copyPixels() {

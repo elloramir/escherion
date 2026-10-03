@@ -23,6 +23,7 @@ const SUBPACKAGE_BY_NAME = {
     "DropShadowFilter": "filters",
     "Event": "events",
     "EventDispatcher": "events",
+    "ExternalInterface": "external",
     "FocusEvent": "events",
     "Font": "text",
     "GlowFilter": "filters",
@@ -42,6 +43,7 @@ const SUBPACKAGE_BY_NAME = {
     "Matrix": "geom",
     "MouseEvent": "events",
     "MovieClip": "display",
+    "Mouse": "ui",
     "Point": "geom",
     "ProgressEvent": "events",
     "Rectangle": "geom",
@@ -62,6 +64,7 @@ const SUBPACKAGE_BY_NAME = {
     "System": "system",
     "TextEvent": "events",
     "TextField": "text",
+    "TextFieldAutoSize": "text",
     "TextFieldType": "text",
     "TextFormat": "text",
     "TextFormatAlign": "text",
@@ -78,6 +81,7 @@ const SUBPACKAGE_BY_NAME = {
     "getQualifiedClassName": "utils",
     "getQualifiedSuperclassName": "utils",
     "getTimer": "utils",
+    "navigateToURL": "net",
 };
 
 export default SUBPACKAGE_BY_NAME;

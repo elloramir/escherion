@@ -25,16 +25,22 @@ class InstructionTranslator {
     #properties;
     #temporaries = 0;
     #usesScope = false;
+    // The hoisted `super(...)` call of a constructor, recorded when its
+    // CONSTRUCTSUPER is translated so the caller can emit it first.
+    superCall = null;
 
-    constructor(abcFile, locals, linker, { receiver, hoistSuper }) {
+    constructor(abcFile, locals, linker, { receiver, hoistSuper, closure = null }) {
         this.#abc = abcFile;
         this.#pool = abcFile.constantPool;
         this.#locals = locals;
         this.#linker = linker;
         this.#receiver = receiver;
         this.#hoistSuper = hoistSuper;
+        this.#closure = closure;
         this.#properties = new PropertyTranslator(this.#pool, this.#stack, linker, { receiver });
     }
+
+    #closure;
 
     get stack() {
         return this.#stack;
@@ -131,13 +137,20 @@ class InstructionTranslator {
             case O.CONSTRUCTSUPER: {
                 const args = stack.popMany(operands[0]);
                 stack.pop();
-                // A zero-arg super is hoisted to the top of the constructor.
-                if (this.#hoistSuper) return "";
+                // `super(...)` is hoisted to the first line of the constructor,
+                // before any `this` access (the AVM2 prologue's pushscope).
+                if (this.#hoistSuper) {
+                    this.superCall = `super(${args.join(", ")});`;
+                    return "";
+                }
                 return `super(${args.join(", ")});`;
             }
 
             case O.NEWCLASS: return this.#push(this.#className(operands[0]));
-            case O.NEWFUNCTION: return this.#push(`domain.__function(${operands[0]})`);
+            case O.NEWFUNCTION: {
+                const index = operands[0];
+                return this.#push(this.#closure ? this.#closure(index) : `domain.__function(${index})`);
+            }
             case O.NEWACTIVATION: case O.NEWCATCH: return this.#push("{}");
 
             case O.HASNEXT: return this.#iterate("domain.__hasNext");
@@ -263,7 +276,10 @@ class InstructionTranslator {
         for (let index = 0; index < count; index++) {
             const value = this.#stack.pop();
             const key = this.#stack.pop();
-            entries.unshift(`${key}: ${value}`);
+            // AS3 allows any expression as a key; a plain `key: value` only
+            // survives when the key is an identifier or a literal string.
+            const readable = /^[A-Za-z_$][\w$]*$|^"[^"\\]*"$|^'[^'\\]*'$/.test(key);
+            entries.unshift(`${readable ? key : `[${key}]`}: ${value}`);
         }
         return this.#push(`{ ${entries.join(", ")} }`);
     }

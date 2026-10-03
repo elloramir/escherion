@@ -21,6 +21,13 @@ class Player {
         stage.stageHeight = canvas.height;
         this.#renderer = new GlRenderer(canvas);
         stage.textMetrics = (field) => this.#renderer.textMetrics(field);
+        stage.bitmapRasterizer = (bitmapData, source, matrix, colorTransform, clipRect, smoothing) => {
+            void smoothing;
+            const pixels = this.#renderer.drawToPixels(
+                source, matrix, colorTransform, bitmapData.width, bitmapData.height, clipRect,
+            );
+            return pixels;
+        };
         this.#input = new Input(stage, canvas, this.#renderer);
     }
 

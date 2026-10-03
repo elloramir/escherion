@@ -25,6 +25,7 @@ class MethodTranspiler {
     #receiver;
     #hoistSuper = false;
     #constructorMode = false;
+    #closure = null;
     #graph = null;
 
     constructor(abcFile, methodBody, options = {}) {
@@ -34,6 +35,7 @@ class MethodTranspiler {
         this.#receiver = options.receiver ?? "this";
         this.#abc = abcFile;
         this.#linker = options.linker ?? null;
+        this.#closure = options.closure ?? null;
     }
 
     writeInto(writer, options = {}) {
@@ -42,11 +44,11 @@ class MethodTranspiler {
         const parameters = this.#locals.parameterNames();
 
         this.#constructorMode = kind === "constructor";
-        this.#hoistSuper = this.#constructorMode
-            && this.#body.instructions.some((i) => i.opcode === O.CONSTRUCTSUPER && i.operands[0] === 0);
+        this.#hoistSuper = this.#constructorMode;
         this.#translator = new InstructionTranslator(this.#abc, this.#locals, this.#linker, {
             receiver: this.#receiver,
             hoistSuper: this.#hoistSuper,
+            closure: this.#closure,
         });
 
         // Build into a scratch writer so an unsupported method never leaves a
@@ -60,7 +62,7 @@ class MethodTranspiler {
             this.#open(scratch, name, kind, isStatic, parameters, body);
         } else {
             const lines = this.#translateLinear();
-            if (this.#hoistSuper) lines.unshift("super();");
+            if (this.#hoistSuper) lines.unshift(this.#translator.superCall ?? "super();");
             const body = () => {
                 this.#declare(scratch, 0);
                 for (const line of lines) scratch.line(line);
@@ -74,8 +76,9 @@ class MethodTranspiler {
     #open(writer, name, kind, isStatic, parameters, body) {
         switch (kind) {
             case "getter": return writer.getter(name, body, isStatic);
-            case "setter": return writer.setter(name, parameters, body, isStatic);
+            case "setter": return writer.setter(name, parameters, body);
             case "constructor": return writer.constructorMethod(parameters, body);
+            case "closure": return writer.block(`((${parameters.join(", ")}) => {`, body, "})");
             default: return writer.method(name, parameters, body, isStatic);
         }
     }
