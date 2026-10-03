@@ -1,4 +1,5 @@
 import Dictionary from "../../swf/Dictionary.js";
+import DisplayObject from "./DisplayObject.js";
 import MovieClip from "./MovieClip.js";
 import Shape from "./Shape.js";
 import Bitmap from "./Bitmap.js";
@@ -36,14 +37,16 @@ function defaultClasses() {
 // SymbolClass entry links, or else the flash class matching the tag.
 class Characters {
 
-    static forCharacter(domain, tag) {
+    // `parent` is the clip the character is placed under; it is already the object's parent while
+    // its constructor runs.
+    static forCharacter(domain, tag, parent) {
         if (!tag) return null;
         const kind = tag.constructor.name;
         const id = Dictionary.idOf(tag);
         const linked = (id !== null ? domain.symbols.get(id) : null)
             ?? (tag.className ? domain.getDefinitionByName(tag.className) : null);
         const Class = linked ?? defaultClasses().get(kind) ?? Shape;
-        const instance = new Class();
+        const instance = DisplayObject.createUnder(parent, () => new Class());
         instance.characterTag = tag;
         if (kind === "DefineEditTextTag") Characters.#configureText(instance, tag);
         return instance;
@@ -60,7 +63,10 @@ class Characters {
             field.width = (tag.bounds.xMax - tag.bounds.xMin) / 20;
             field.height = (tag.bounds.yMax - tag.bounds.yMin) / 20;
         }
-        if (typeof tag.initialText === "string" && tag.initialText.length > 0) field.text = tag.initialText;
+        if (typeof tag.initialText === "string" && tag.initialText.length > 0) {
+            if (tag.html) field.htmlText = tag.initialText;
+            else field.text = tag.initialText;
+        }
     }
 }
 

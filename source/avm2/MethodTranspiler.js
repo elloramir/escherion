@@ -30,7 +30,7 @@ class MethodTranspiler {
     constructor(abcFile, methodBody, options = {}) {
         this.#body = methodBody;
         this.#pool = abcFile.constantPool;
-        this.#locals = new Locals(abcFile.methods[methodBody.methodIndex] ?? null, methodBody);
+        this.#locals = new Locals(abcFile.methods[methodBody.methodIndex] ?? null, methodBody, abcFile.constantPool);
         this.#receiver = options.receiver ?? "this";
         this.#abc = abcFile;
         this.#linker = options.linker ?? null;
@@ -89,6 +89,7 @@ class MethodTranspiler {
     }
 
     #declare(writer, slotCount) {
+        if (this.#translator.usesScope) writer.line("const _scope = [];");
         const line = this.#locals.declaration(slotCount, this.#translator.temporaryCount);
         if (line) writer.line(line);
     }

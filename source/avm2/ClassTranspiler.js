@@ -1,6 +1,7 @@
 import Opcode from "../abc/code/Opcode.js";
 import TraitKind from "../abc/traits/TraitKind.js";
 import Names from "./Names.js";
+import Expressions from "./Expressions.js";
 import MethodTranspiler from "./MethodTranspiler.js";
 
 const O = Opcode;
@@ -9,6 +10,11 @@ const O = Opcode;
 const TYPE_OPCODES = new Set([
     O.GETLEX, O.FINDPROPSTRICT, O.FINDPROPERTY,
     O.COERCE, O.ASTYPE, O.ISTYPE, O.CONSTRUCTPROP,
+]);
+
+// A class initializer holding only these does nothing.
+const EMPTY_INITIALIZER = new Set([
+    O.GETLOCAL0, O.PUSHSCOPE, O.RETURNVOID, O.NOP, O.LABEL, O.DEBUG, O.DEBUGLINE, O.DEBUGFILE,
 ]);
 
 // Emits one ABC class inside the movie factory. The factory closes over
@@ -50,6 +56,12 @@ class ClassTranspiler {
         return names;
     }
 
+    // Whether the class has a static initializer worth running (`Name.__cinit()`).
+    hasInitializer() {
+        const body = this.#bodies.get(this.#abc.classes[this.#index].cinitIndex);
+        return body !== undefined && body.instructions.some((instruction) => !EMPTY_INITIALIZER.has(instruction.opcode));
+    }
+
     name() {
         return this.#name(this.#abc.instances[this.#index].nameIndex);
     }
@@ -76,6 +88,7 @@ class ClassTranspiler {
             this.#writeConstructor(emitter, instance.iinitIndex);
             this.#writeMembers(emitter, instance.traits, false);
             this.#writeMembers(emitter, classInfo.traits, true);
+            this.#writeInitializer(emitter, classInfo.cinitIndex);
         });
         return emitter;
     }
@@ -86,11 +99,16 @@ class ClassTranspiler {
             // Only initialised slots become JS fields: a field with no value would
             // be set to undefined after `super()` and clobber a timeline child of
             // the same instance name (bound before the constructor body runs).
-            if (!trait.vindex) continue;
             const prefix = isStatic ? "static " : "";
             const name = this.#name(trait.nameIndex);
+            // A static slot is declared even without a value, so scope lookups find it on the class
+            // (its initializer assigns it later).
+            if (!trait.vindex) {
+                if (isStatic) emitter.line(`${prefix}${name};${this.#typeHint(trait)}`);
+                continue;
+            }
             const resolved = this.#pool.valueAt(trait.vindex, trait.vkind);
-            emitter.line(`${prefix}${name} = ${ClassTranspiler.#literal(resolved)};${this.#typeHint(trait)}`);
+            emitter.line(`${prefix}${name} = ${Expressions.literal(resolved)};${this.#typeHint(trait)}`);
         }
     }
 
@@ -104,6 +122,20 @@ class ClassTranspiler {
             }).writeInto(emitter, { kind: "constructor" });
         } catch (error) {
             emitter.comment(`constructor unsupported: ${error.message}`);
+        }
+    }
+
+    // The static initializer (`cinit`) runs once, with the class as `this`, after every class of the
+    // movie exists.
+    #writeInitializer(emitter, cinitIndex) {
+        if (!this.hasInitializer()) return;
+        try {
+            new MethodTranspiler(this.#abc, this.#bodies.get(cinitIndex), {
+                receiver: "this",
+                linker: this.#linker,
+            }).writeInto(emitter, { name: "__cinit", kind: "method", static: true });
+        } catch (error) {
+            emitter.comment(`static initializer unsupported: ${error.message}`);
         }
     }
 
@@ -152,13 +184,6 @@ class ClassTranspiler {
             case TraitKind.SETTER: return "setter";
             default: return "method";
         }
-    }
-
-    static #literal(value) {
-        if (value === undefined) return "undefined";
-        if (value === null) return "null";
-        if (typeof value === "string") return JSON.stringify(value);
-        return String(value);
     }
 }
 

@@ -11,6 +11,8 @@ class Stage extends DisplayObjectContainer {
         this.stageHeight = 550;
         // Pointer position in stage coordinates, published by the input router.
         this.pointer = null;
+        // Measures a text field's layout; the player sets it to its renderer's.
+        this.textMetrics = null;
         this.frameRate = 24;
         this.align = "TL";
         this.scaleMode = "noScale";

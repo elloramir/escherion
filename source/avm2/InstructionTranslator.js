@@ -24,6 +24,7 @@ class InstructionTranslator {
     #operators = new OperatorTranslator(this.#stack);
     #properties;
     #temporaries = 0;
+    #usesScope = false;
 
     constructor(abcFile, locals, linker, { receiver, hoistSuper }) {
         this.#abc = abcFile;
@@ -41,6 +42,11 @@ class InstructionTranslator {
 
     get operators() {
         return this.#operators;
+    }
+
+    // Whether the method uses the AVM2 scope stack (`_scope`), e.g. for activation objects.
+    get usesScope() {
+        return this.#usesScope;
     }
 
     get temporaryCount() {
@@ -62,9 +68,15 @@ class InstructionTranslator {
 
         switch (code) {
             case O.NOP: case O.LABEL: case O.DEBUG: case O.DEBUGLINE: case O.DEBUGFILE:
-            case O.DXNS: case O.POPSCOPE: case O.COERCE_A: case O.CONVERT_O:
+            case O.DXNS: case O.COERCE_A: case O.CONVERT_O:
                 return "";
-            case O.PUSHSCOPE: case O.PUSHWITH: case O.DXNSLATE:
+            case O.PUSHSCOPE:
+                this.#usesScope = true;
+                return `_scope.push(${stack.pop()});`;
+            case O.POPSCOPE:
+                this.#usesScope = true;
+                return "_scope.pop();";
+            case O.PUSHWITH: case O.DXNSLATE:
                 stack.pop();
                 return "";
 
@@ -100,7 +112,9 @@ class InstructionTranslator {
             case O.FINDPROPSTRICT: case O.FINDPROPERTY: return properties.findProperty(operands[0]);
             case O.DELETEPROPERTY: return properties.deleteProperty(operands[0]);
             case O.GETGLOBALSCOPE: return this.#push("domain");
-            case O.GETSCOPEOBJECT: return this.#push(`domain.__scopeObject(${operands[0]})`);
+            case O.GETSCOPEOBJECT:
+                this.#usesScope = true;
+                return this.#push(`_scope[${operands[0]}]`);
             case O.GETSLOT: return this.#push(`domain.__getSlot(${stack.pop()}, ${operands[0]})`);
             case O.SETSLOT: {
                 const value = stack.pop();

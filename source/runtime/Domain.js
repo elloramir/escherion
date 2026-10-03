@@ -20,9 +20,23 @@ class Domain {
 
     #classes = new Map();
     #bound = new Map();
+    // Bound methods by receiver and name: an AS3 method closure is the same object each time it
+    // is read, so listeners added and removed through it match.
+    #methods = new WeakMap();
 
     int = { MAX_VALUE: 2147483647, MIN_VALUE: -2147483648 };
     uint = { MAX_VALUE: 4294967295, MIN_VALUE: 0 };
+    // AS3 top-level functions that are the JavaScript ones.
+    parseInt = parseInt;
+    parseFloat = parseFloat;
+    isNaN = isNaN;
+    isFinite = isFinite;
+    escape = escape;
+    unescape = unescape;
+    encodeURI = encodeURI;
+    encodeURIComponent = encodeURIComponent;
+    decodeURI = decodeURI;
+    decodeURIComponent = decodeURIComponent;
     XML = XML;
     XMLList = XMLList;
     Vector = Vector;
@@ -109,10 +123,6 @@ class Domain {
         slots[index] = value;
     }
 
-    __scopeObject() {
-        return {};
-    }
-
     __function(index) {
         return () => console.warn(`[player] closure ${index} is not implemented`);
     }
@@ -179,7 +189,7 @@ class Domain {
     // AS3 binds method references; a plain field passes through unchanged.
     __method(receiver, name) {
         const value = receiver?.[name];
-        return typeof value === "function" ? value.bind(receiver) : value;
+        return typeof value === "function" ? this.#bind(receiver, name, value) : value;
     }
 
     // Scope read of a name: resolve the owner (instance, class statics or global)
@@ -188,7 +198,23 @@ class Domain {
     __methodRef(receiver, name) {
         const owner = this.__ref(receiver, name);
         const value = owner?.[name];
-        return typeof value === "function" ? value.bind(owner) : value;
+        return typeof value === "function" ? this.#bind(owner, name, value) : value;
+    }
+
+    #bind(receiver, name, method) {
+        if (receiver === null || (typeof receiver !== "object" && typeof receiver !== "function")) {
+            return method.bind(receiver);
+        }
+        let byName = this.#methods.get(receiver);
+        if (!byName) {
+            byName = new Map();
+            this.#methods.set(receiver, byName);
+        }
+        const cached = byName.get(name);
+        if (cached && cached.method === method) return cached.bound;
+        const bound = method.bind(receiver);
+        byName.set(name, { method, bound });
+        return bound;
     }
 }
 

@@ -258,10 +258,14 @@ class TextField extends InteractiveObject {
         return metrics?.outer ? { width: metrics.outer.width, height: metrics.outer.height } : null;
     }
 
-    // Laid-out metrics belong to the renderer, which is not connected to
-    // TextField yet: callers fall back to the field's own box.
-    static #measure() {
-        return null;
+    // Laid-out metrics come from the renderer through the stage; a field that is not on a stage
+    // falls back to its own box.
+    static #measure(instance) {
+        try {
+            return instance.stage?.textMetrics?.(instance) ?? null;
+        } catch {
+            return null;
+        }
     }
 
     static #splitLines(text) {

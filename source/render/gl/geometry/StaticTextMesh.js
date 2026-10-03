@@ -35,6 +35,7 @@ class StaticTextMesh {
         const styles = new Map();
         let font = null;
         let style = StaticTextMesh.#style(styles, BLACK);
+        let height = null;
         let x = 0;
         let y = 0;
         for (const record of tag.textRecords ?? []) {
@@ -42,11 +43,13 @@ class StaticTextMesh {
                 const candidate = dictionary?.get(record.fontId);
                 font = StaticTextMesh.#isFont(candidate) ? candidate : null;
             }
+            // A record without its own font, size or color continues the previous one.
+            if (record.textHeight !== null) height = record.textHeight;
             if (record.textColor) style = StaticTextMesh.#style(styles, record.textColor);
             if (record.xOffset !== null) x = record.xOffset;
             if (record.yOffset !== null) y = record.yOffset;
-            if (!font || font.numGlyphs === 0 || record.textHeight === null) continue;
-            const k = record.textHeight / EM_SQUARE;
+            if (!font || font.numGlyphs === 0 || height === null) continue;
+            const k = height / EM_SQUARE;
             const fontScale = scale * matrixScale * k;
             for (const glyph of record.glyphEntries) {
                 const shape = font.glyphShapeTable[glyph.glyphIndex];

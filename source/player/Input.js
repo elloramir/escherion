@@ -136,6 +136,9 @@ class Input {
         }
         const previous = this.#hovered;
         this.#hovered = target;
+        // A button the pointer left goes back to its up state.
+        const left = this.#buttonFor(previous);
+        if (left && left !== this.#buttonFor(target)) left.__setState("up");
         const previousChain = this.#ancestry(previous);
         const targetChain = this.#ancestry(target);
         if (previous) {
@@ -162,8 +165,20 @@ class Input {
     #updateCursor(target) {
         if (!this.#canvas?.style) return;
         const button = this.#buttonFor(target);
-        const hand = button ? button.useHandCursor !== false : false;
-        this.#canvas.style.cursor = hand ? "pointer" : "default";
+        if (button) {
+            this.#canvas.style.cursor = button.useHandCursor !== false ? "pointer" : "default";
+            return;
+        }
+        this.#canvas.style.cursor = this.#textFieldFor(target) ? "text" : "default";
+    }
+
+    // The editable text field under the target (a field is its own hit object).
+    #textFieldFor(target) {
+        for (let node = target, guard = 0; node && guard < 256; guard++) {
+            if (node instanceof TextField && node.selectable !== false && node.type === "input") return node;
+            node = node.parent;
+        }
+        return null;
     }
 
 

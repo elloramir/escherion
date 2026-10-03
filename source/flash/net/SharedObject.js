@@ -20,7 +20,7 @@ class SharedObject extends EventDispatcher {
     static getLocal(name, localPath = null, secure = false) {
         void localPath;
         void secure;
-        const shared = new SharedObject(null, name);
+        const shared = new SharedObject(name);
         const raw = SharedObject.#storage()?.getItem(`so:${name}`);
         if (raw) {
             try {

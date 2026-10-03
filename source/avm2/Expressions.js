@@ -15,6 +15,15 @@ class Expressions {
         return `(${expression})`;
     }
 
+    // A JavaScript literal for a constant-pool value.
+    static literal(value) {
+        if (value === undefined) return "undefined";
+        if (value === null) return "null";
+        if (typeof value === "string") return JSON.stringify(value);
+        if (typeof value === "number") return Expressions.number(value);
+        return String(value);
+    }
+
     static number(value) {
         if (Object.is(value, -0)) return "-0";
         if (Number.isNaN(value)) return "NaN";

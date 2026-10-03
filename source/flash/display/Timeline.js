@@ -85,6 +85,11 @@ class Timeline {
         } else if (clip.isPlaying !== false && total > 1) {
             target = current + 1;
         }
+        // A goto to the frame already shown does not enter it again: no rebuild and no frame script.
+        if (Number.isFinite(pending) && pending === synced && !needsInitial) {
+            clip.__gotoFrame = null;
+            target = null;
+        }
         if (target !== null && target < 0) target = 0;
         if (target !== null && target >= total) target = isGoto ? total - 1 : 0;
         const rewind = isGoto && !needsInitial && Number.isFinite(synced)
@@ -111,7 +116,7 @@ class Timeline {
         try {
             Timeline.advanceInstance(clip, true);
         } catch (error) {
-            console.warn("[player] gotoNow failed:", error?.message ?? error);
+            console.warn("[player] gotoNow failed:", error);
         }
     }
 
@@ -123,7 +128,9 @@ class Timeline {
         for (let frame = 0; frame <= index; frame++) Timeline.#applyTags(states, frames[frame]);
         // A backward goto re-places the target frame's objects from scratch.
         if (rewind && Array.isArray(clip.children)) {
-            for (const child of [...clip.children]) clip.removeChild(child);
+            for (const child of [...clip.children]) {
+                if (Timeline.#placements.has(child)) clip.removeChild(child);
+            }
         }
         Timeline.#sync(clip, states);
         clip.__currentFrame = index;
@@ -163,7 +170,7 @@ class Timeline {
         try {
             script.call(clip);
         } catch (error) {
-            console.warn("[player] frame script failed:", error?.message ?? error);
+            console.warn("[player] frame script failed:", error);
         } finally {
             RUNNING_SCRIPTS.delete(clip);
         }
@@ -211,7 +218,10 @@ class Timeline {
 
     static #sync(clip, states) {
         const byDepth = new Map();
-        for (const child of [...clip.children]) byDepth.set(Timeline.#depthOf(child), child);
+        // Children a script added are not the timeline's to remove or replace.
+        for (const child of [...clip.children]) {
+            if (Timeline.#placements.has(child)) byDepth.set(Timeline.#depthOf(child), child);
+        }
         for (const [depth, child] of byDepth) {
             if (!states.has(depth)) clip.removeChild(child);
         }
@@ -268,7 +278,7 @@ class Timeline {
         const domain = clip.__domain;
         const tag = state.characterId === null ? null : domain.dictionary.get(state.characterId);
         if (!tag) return null;
-        const child = Characters.forCharacter(domain, tag);
+        const child = Characters.forCharacter(domain, tag, clip);
         const kind = child?.characterTag?.constructor?.name;
         if (kind === "DefineSpriteTag") {
             // Build without running frame 0: the clip is not on the display list
@@ -288,7 +298,7 @@ class Timeline {
                 if (!predicate(record)) continue;
                 const childTag = domain.dictionary.get(record.characterId);
                 if (!childTag) continue;
-                const child = Characters.forCharacter(domain, childTag);
+                const child = Characters.forCharacter(domain, childTag, container);
                 if (!child) continue;
                 if (child.characterTag?.constructor?.name === "DefineSpriteTag") {
                     Timeline.build(domain, child, child.characterTag.controlTags ?? [], false);
@@ -330,7 +340,11 @@ class Timeline {
             child.scaleY = Math.hypot(c, d) * (a * d - b * c < 0 ? -1 : 1);
             child.rotation = (Math.atan2(b, a) * 180) / Math.PI;
         }
-        if (state.colorTransform) child.colorTransform = state.colorTransform;
+        if (state.colorTransform) {
+            child.colorTransform = state.colorTransform;
+            // The alpha multiplier of a placement is the object's `alpha`.
+            child.alpha = (state.colorTransform.alphaMult ?? 256) / 256;
+        }
         if (state.name) child.name = state.name;
         if (state.blendMode && state.blendMode !== "normal") child.blendMode = state.blendMode;
         if (state.visible === false) child.visible = false;

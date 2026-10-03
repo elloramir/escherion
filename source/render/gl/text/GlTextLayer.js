@@ -50,6 +50,13 @@ class GlTextLayer {
         renderer.drawTexture(entry.texture, entry.rect, matrix, ct, alpha, true);
     }
 
+    // Layout metrics of a text field (`textWidth`, `textHeight`, `numLines`, `outer` box), from the
+    // same layout the rasterizer uses.
+    static measure(node) {
+        const tag = node.characterTag?.constructor?.name === "DefineEditTextTag" ? node.characterTag : null;
+        return DynamicText.metrics(node, tag, GlTextLayer.#measureContext());
+    }
+
     // A shared context used only for text measuring.
     static #measureContext() {
         GlTextLayer.#measureCanvas ??= Surface.context(Surface.create(8, 8));

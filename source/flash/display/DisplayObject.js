@@ -11,13 +11,30 @@ let autoName = 0;
 // itself is owned by the WebGL engine.
 class DisplayObject extends EventDispatcher {
 
+    // The parent a timeline is placing the object under while its constructor runs.
+    static #placing = null;
+
     #parent = null;
     #width = 0;
     #height = 0;
     #transform = null;
 
+    // Runs `create` so that the display object it constructs already has `parent` set when its
+    // constructor body runs, as for objects placed by a timeline (`root` and `stage` work there).
+    static createUnder(parent, create) {
+        const previous = DisplayObject.#placing;
+        DisplayObject.#placing = parent;
+        try {
+            return create();
+        } finally {
+            DisplayObject.#placing = previous;
+        }
+    }
+
     constructor() {
         super();
+        this.#parent = DisplayObject.#placing ?? null;
+        DisplayObject.#placing = null;
         this.x = 0;
         this.y = 0;
         this.scaleX = 1;

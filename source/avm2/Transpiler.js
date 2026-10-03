@@ -56,6 +56,13 @@ class Transpiler {
             const simple = Names.simpleNameOf(this.#abc.constantPool, this.#abc.instances[index].nameIndex);
             emitter.line(`domain.defineClass(${JSON.stringify(qualified)}, ${simple});`);
         }
+        // Static initializers run once every class exists, base classes first.
+        for (const index of order) {
+            const classTranspiler = new ClassTranspiler(this.#abc, index, this.#linker);
+            if (!classTranspiler.hasInitializer()) continue;
+            const name = classTranspiler.name();
+            emitter.line(`try { ${name}.__cinit(); } catch (error) { console.warn("${name} static initializer failed:", error); }`);
+        }
         emitter.line(`return ${this.#documentName(documentClass)};`);
         emitter.dedent();
         emitter.line("}");

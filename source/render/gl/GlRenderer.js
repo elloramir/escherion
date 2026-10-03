@@ -163,6 +163,11 @@ class GlRenderer {
         this.#forceRedraw = true;
     }
 
+    // Layout metrics of a text field as this renderer draws it.
+    textMetrics(node) {
+        return GlTextLayer.measure(node);
+    }
+
     // Whether a point (pixels, local to the character) lies on a shape's drawn area, for input
     // hit-testing. Uses the same meshes the renderer draws.
     shapeContains(tag, x, y) {

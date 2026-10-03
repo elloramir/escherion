@@ -20,6 +20,7 @@ class Player {
         stage.stageWidth = canvas.width;
         stage.stageHeight = canvas.height;
         this.#renderer = new GlRenderer(canvas);
+        stage.textMetrics = (field) => this.#renderer.textMetrics(field);
         this.#input = new Input(stage, canvas, this.#renderer);
     }
 

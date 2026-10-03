@@ -20,9 +20,22 @@ class URLLoader extends EventDispatcher {
     }
 
     load(request) {
-        const url = this.constructor.domain.host.resolve(request?.url ?? request);
-        const options = { method: request?.method ?? "GET", body: request?.data ?? undefined };
-        fetch(url, options)
+        let url = this.constructor.domain.host.resolve(request?.url ?? request);
+        const method = String(request?.method ?? "GET").toUpperCase();
+        const headers = {};
+        for (const header of request?.requestHeaders ?? []) headers[header.name] = header.value;
+        let body;
+        const data = request?.data;
+        if (data !== null && data !== undefined) {
+            // Like Flash: variables go in the query string of a GET and in the form-encoded body otherwise.
+            if (method === "GET") {
+                url += (url.includes("?") ? "&" : "?") + String(data);
+            } else {
+                body = String(data);
+                headers["Content-Type"] ??= request.contentType ?? "application/x-www-form-urlencoded";
+            }
+        }
+        fetch(url, { method, headers, body })
             .then(async (response) => {
                 if (!response.ok) throw new Error(`${response.status} ${response.statusText}`);
                 const text = await response.text();
