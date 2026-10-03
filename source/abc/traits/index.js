@@ -1,0 +1,12 @@
+export { default as TraitKind } from "./TraitKind.js";
+export { default as TraitAttributes } from "./TraitAttributes.js";
+export { default as TraitInfo } from "./TraitInfo.js";
+export { default as SlotTrait } from "./SlotTrait.js";
+export { default as ConstTrait } from "./ConstTrait.js";
+export { default as MethodTrait } from "./MethodTrait.js";
+export { default as GetterTrait } from "./GetterTrait.js";
+export { default as SetterTrait } from "./SetterTrait.js";
+export { default as ClassTrait } from "./ClassTrait.js";
+export { default as FunctionTrait } from "./FunctionTrait.js";
+export { default as MetadataInfo } from "./MetadataInfo.js";
+export { default as TraitReader } from "./TraitReader.js";

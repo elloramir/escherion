@@ -1,0 +1,16 @@
+{
+    "name": "c_swf",
+    "private": true,
+    "type": "module",
+    "scripts": {
+        "start": "node tools/serve.mjs",
+        "transpile": "node transpile.mjs",
+        "test": "node test.mjs"
+    },
+    "dependencies": {
+        "chokidar": "^4.0.3",
+        "express": "^5.1.0",
+        "http-proxy-middleware": "^3.0.3",
+        "ws": "^8.18.0"
+    }
+}

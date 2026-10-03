@@ -1,0 +1,13 @@
+export { default as DisplayObject } from "./DisplayObject.js";
+export { default as InteractiveObject } from "./InteractiveObject.js";
+export { default as DisplayObjectContainer } from "./DisplayObjectContainer.js";
+export { default as Sprite } from "./Sprite.js";
+export { default as MovieClip } from "./MovieClip.js";
+export { default as Shape } from "./Shape.js";
+export { default as Bitmap } from "./Bitmap.js";
+export { default as BitmapData } from "./BitmapData.js";
+export { default as SimpleButton } from "./SimpleButton.js";
+export { default as Graphics } from "./Graphics.js";
+export { default as LoaderInfo } from "./LoaderInfo.js";
+export { default as Loader } from "./Loader.js";
+export { default as Stage } from "./Stage.js";
