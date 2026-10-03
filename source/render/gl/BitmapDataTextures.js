@@ -10,7 +10,7 @@ class BitmapDataTextures {
 
     // Returns (and caches) the texture of a `flash.display.BitmapData`.
     entry(bitmapData) {
-        const data = bitmapData?.__data;
+        const data = bitmapData?.data;
         const width = Math.floor(Number(bitmapData?.width) || 0);
         const height = Math.floor(Number(bitmapData?.height) || 0);
         if (!(data instanceof Uint8ClampedArray) || width <= 0 || height <= 0 || data.length < width * height * 4) {

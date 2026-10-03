@@ -3,6 +3,11 @@ import Event from "../events/Event.js";
 import Sprite from "./Sprite.js";
 
 const TWIPS = 20;
+// PlaceObject3 blend mode ids (1 and 0 are both normal).
+const BLEND_MODES = [
+    "normal", "normal", "layer", "multiply", "screen", "lighten", "darken", "difference",
+    "add", "subtract", "invert", "alpha", "erase", "overlay", "hardlight",
+];
 const PLACE_TAGS = new Set(["PlaceObject2Tag", "PlaceObject3Tag"]);
 const RUNNING_SCRIPTS = new Set();
 // Clips seen by an advance pass. `gotoNow` before that (e.g. from a constructor)
@@ -14,14 +19,19 @@ const SEEN = new WeakSet();
 // state lives in `__`-prefixed fields on the clip, shared with the renderer.
 class Timeline {
 
+    // The frames (lists of tags) of each clip with a timeline.
+    static #frames = new WeakMap();
+    // Where a timeline placed each of its children: depth, character and clip layer.
+    static #placements = new WeakMap();
+    // Instances whose linked timeline is already built.
+    static #bound = new WeakSet();
+
     // `domain` is the movie the clip belongs to: it resolves the characters the
     // clip places and the classes linked to them.
     static build(domain, clip, tags, runScript = true) {
         clip.__domain = domain;
-        clip.__controlTags = tags;
         const frames = Timeline.#splitFrames(tags);
-        clip.__frames = frames;
-        clip.__depthStates = new Map();
+        Timeline.#frames.set(clip, frames);
         // MovieClip needs frame count + labels so `gotoAndPlay("Label")` and
         // `totalFrames` work; the timeline is the authority, so feed it here.
         clip.setTimeline?.({
@@ -46,7 +56,7 @@ class Timeline {
     // multi-frame clip steps forward; otherwise it holds. Frame events surround it.
     static advanceInstance(clip, gotoOnly = false) {
         SEEN.add(clip);
-        const frames = clip.__frames;
+        const frames = Timeline.#frames.get(clip);
         if (!Array.isArray(frames) || frames.length === 0) {
             if (gotoOnly) return;
             Timeline.#dispatch(clip, Event.ENTER_FRAME);
@@ -107,7 +117,7 @@ class Timeline {
 
     // Materializes a frame without running its script (used by build/advance).
     static #applyFrame(clip, index, rewind) {
-        const frames = clip.__frames ?? [];
+        const frames = Timeline.#frames.get(clip) ?? [];
         if (index < 0 || index >= frames.length) return;
         const states = new Map();
         for (let frame = 0; frame <= index; frame++) Timeline.#applyTags(states, frames[frame]);
@@ -189,8 +199,9 @@ class Timeline {
                     matrix: tag.matrix ?? existing.matrix ?? null,
                     colorTransform: tag.colorTransform ?? existing.colorTransform ?? null,
                     ratio: tag.ratio ?? existing.ratio ?? 0,
-                    blendMode: tag.blendMode ?? existing.blendMode ?? "normal",
+                    blendMode: BLEND_MODES[tag.blendMode] ?? existing.blendMode ?? "normal",
                     visible: tag.visible ?? existing.visible ?? true,
+                    clipDepth: tag.clipDepth ?? existing.clipDepth ?? null,
                 });
             } else if (kind === "RemoveObject2Tag") {
                 states.delete(tag.depth);
@@ -200,28 +211,57 @@ class Timeline {
 
     static #sync(clip, states) {
         const byDepth = new Map();
-        for (const child of [...clip.children]) byDepth.set(child.__depth, child);
+        for (const child of [...clip.children]) byDepth.set(Timeline.#depthOf(child), child);
         for (const [depth, child] of byDepth) {
             if (!states.has(depth)) clip.removeChild(child);
         }
         for (const [depth, state] of states) {
             let child = byDepth.get(depth);
-            if (child && state.characterId !== null && child.__characterId !== state.characterId) {
+            if (child && state.characterId !== null && Timeline.#placements.get(child)?.characterId !== state.characterId) {
                 clip.removeChild(child);
                 child = null;
             }
             if (!child) {
                 child = Timeline.#create(clip, state);
                 if (!child) continue;
-                child.__depth = depth;
-                child.__characterId = state.characterId;
+                Timeline.#placements.set(child, { depth, characterId: state.characterId, clippedBy: null });
                 clip.addChild(child);
             }
             Timeline.#applyTransform(child, state);
             // Author-time instance names become properties on the parent clip.
             if (state.name) clip[state.name] = child;
         }
-        clip.children.sort((a, b) => (a.__depth ?? 0) - (b.__depth ?? 0));
+        clip.children.sort((a, b) => (Timeline.#depthOf(a) ?? 0) - (Timeline.#depthOf(b) ?? 0));
+        Timeline.#applyClipLayers(clip, states);
+    }
+
+    // A placed object with a clip depth masks every object above it up to that depth
+    // (the clip layer is not drawn itself, which the renderer does for any mask).
+    static #applyClipLayers(clip, states) {
+        for (const child of clip.children) {
+            const placement = Timeline.#placements.get(child);
+            const clipper = placement?.clippedBy;
+            if (clipper && (!clip.children.includes(clipper)
+                || states.get(Timeline.#depthOf(clipper))?.clipDepth < placement.depth)) {
+                child.mask = null;
+                placement.clippedBy = null;
+            }
+        }
+        for (const [depth, state] of states) {
+            if (state.clipDepth === null) continue;
+            const clipper = clip.children.find((child) => Timeline.#depthOf(child) === depth);
+            if (!clipper) continue;
+            for (const child of clip.children) {
+                const placement = Timeline.#placements.get(child);
+                if (!placement || placement.depth <= depth || placement.depth > state.clipDepth) continue;
+                child.mask = clipper;
+                placement.clippedBy = clipper;
+            }
+        }
+    }
+
+    static #depthOf(child) {
+        return Timeline.#placements.get(child)?.depth;
     }
 
     static #create(clip, state) {
@@ -299,10 +339,10 @@ class Timeline {
     // that character's children when it is constructed, before its own
     // constructor body runs (the MovieClip constructor calls this).
     static bindSymbol(instance) {
-        if (instance.__symbolBound) return;
+        if (Timeline.#bound.has(instance)) return;
         const tag = instance.constructor.__symbolTag;
         if (!tag) return;
-        instance.__symbolBound = true;
+        Timeline.#bound.add(instance);
         instance.characterTag = tag;
         Timeline.build(instance.constructor.__domain, instance, tag.controlTags ?? [], false);
     }

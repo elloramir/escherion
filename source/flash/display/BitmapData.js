@@ -76,8 +76,7 @@ class BitmapData {
         }
     }
 
-    // The compositor lives in the renderer (`__drawToBitmap`); until it is wired,
-    // the bitmap stays as-is.
+    // The compositor lives in the renderer; until it is wired, the bitmap stays as-is.
     draw() {
         console.warn("flash.display.BitmapData.draw: not implemented");
     }

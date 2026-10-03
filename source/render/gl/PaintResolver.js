@@ -96,7 +96,7 @@ class PaintResolver {
     static #swfMatrix(matrix) {
         if (!matrix) return Matrix.identity();
         return new Float64Array([
-            matrix.scaleX, matrix.rotateSkew1, matrix.rotateSkew0,
+            matrix.scaleX, matrix.rotateSkew0, matrix.rotateSkew1,
             matrix.scaleY, matrix.translateX, matrix.translateY,
         ]);
     }

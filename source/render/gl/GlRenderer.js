@@ -25,7 +25,7 @@ import NineSlice from "./NineSlice.js";
 import BakeRenderer from "./BakeRenderer.js";
 import BitmapCacheRenderer from "./BitmapCacheRenderer.js";
 
-const { MAX_DEPTH, TWIPS, MODE_COLOR, MODE_MASK } = RenderState;
+const { MAX_DEPTH, MODE_COLOR, MODE_MASK } = RenderState;
 
 // Renders a Flash display list with WebGL2.
 //
@@ -163,20 +163,16 @@ class GlRenderer {
         this.#forceRedraw = true;
     }
 
-    // Local-pixel bounds of a character tag, for input hit-testing. Uses the same
-    // mesh the renderer draws, so the clickable area matches what is visible.
-    shapeBounds(tag) {
-        if (!tag) return null;
-        const name = tag.constructor?.name ?? "";
-        if (!name.startsWith("DefineShape") && !name.startsWith("DefineMorph")) return null;
-        const mesh = this.#meshSource.shape(tag, 1 / TWIPS);
-        const b = mesh?.bounds;
-        if (!b || b.xMax < b.xMin || b.yMax < b.yMin) return null;
-        return [b.xMin, b.yMin, b.xMax, b.yMax];
+    // Whether a point (pixels, local to the character) lies on a shape's drawn area, for input
+    // hit-testing. Uses the same meshes the renderer draws.
+    shapeContains(tag, x, y) {
+        const name = tag?.constructor?.name ?? "";
+        if (!name.startsWith("DefineShape") && !name.startsWith("DefineMorph")) return false;
+        return this.#meshSource.shapeContains(tag, x, y);
     }
 
-    graphicsBounds(commands) {
-        return this.#meshSource.graphicsBounds(commands);
+    graphicsContains(commands, x, y) {
+        return this.#meshSource.graphicsContains(commands, x, y);
     }
 
 

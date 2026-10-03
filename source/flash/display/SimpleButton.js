@@ -15,13 +15,10 @@ class SimpleButton extends Sprite {
         this.useHandCursor = true;
         this.trackAsMenu = false;
         this.soundTransform = null;
-        this.__state = "up";
-        this.__buttonTag = null;
     }
 
     // Shows one state's sub-tree and hides the others.
     __setState(state) {
-        this.__state = state;
         const states = { up: this.upState, over: this.overState, down: this.downState };
         for (const [key, container] of Object.entries(states)) {
             if (container) container.visible = key === state;

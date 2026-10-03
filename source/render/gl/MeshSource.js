@@ -1,5 +1,6 @@
 import MeshCache from "./geometry/MeshCache.js";
 import GraphicsMesh from "./geometry/GraphicsMesh.js";
+import MeshHit from "./geometry/MeshHit.js";
 
 const SCALE_SLACK_UP = 2;
 const SCALE_SLACK_DOWN = 8;
@@ -43,6 +44,17 @@ class MeshSource {
         const b = mesh?.bounds;
         if (!b || (b.xMax <= b.xMin && b.yMax <= b.yMin)) return null;
         return [b.xMin, b.yMin, b.xMax, b.yMax];
+    }
+
+    // Whether a point (in pixels, local to the shape) falls on its drawn area.
+    shapeContains(tag, x, y) {
+        const mesh = this.#cache.get(tag, 1 / TWIPS);
+        return mesh !== null && MeshHit.contains(mesh, x * TWIPS, y * TWIPS);
+    }
+
+    graphicsContains(commands, x, y) {
+        const mesh = this.graphics(commands, 1 / TWIPS);
+        return mesh !== null && MeshHit.contains(mesh, x * TWIPS, y * TWIPS);
     }
 }
 

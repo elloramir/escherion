@@ -419,8 +419,8 @@ class GraphicsMesh {
         };
         return {
             scaleX: read("a", 1) * linearScale,
-            rotateSkew1: read("b", 0) * linearScale,
-            rotateSkew0: read("c", 0) * linearScale,
+            rotateSkew0: read("b", 0) * linearScale,
+            rotateSkew1: read("c", 0) * linearScale,
             scaleY: read("d", 1) * linearScale,
             translateX: read("tx", 0) * TWIPS,
             translateY: read("ty", 0) * TWIPS,

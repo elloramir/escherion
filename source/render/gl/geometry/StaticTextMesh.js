@@ -26,8 +26,8 @@ class StaticTextMesh {
         const matrix = tag.textMatrix;
         if (!matrix) return MeshBuilder.finish([], scale, false);
         const a = matrix.scaleX;
-        const b = matrix.rotateSkew1;
-        const c = matrix.rotateSkew0;
+        const b = matrix.rotateSkew0;
+        const c = matrix.rotateSkew1;
         const d = matrix.scaleY;
         const e = matrix.translateX;
         const f = matrix.translateY;

@@ -57,8 +57,8 @@ class BitmapCache {
         if (matrix && typeof pattern.setTransform === "function") {
             pattern.setTransform({
                 a: matrix.scaleX,
-                b: matrix.rotateSkew1,
-                c: matrix.rotateSkew0,
+                b: matrix.rotateSkew0,
+                c: matrix.rotateSkew1,
                 d: matrix.scaleY,
                 e: matrix.translateX,
                 f: matrix.translateY,

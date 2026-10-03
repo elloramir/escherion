@@ -3,28 +3,30 @@ import XMLNodes from "./XMLNodes.js";
 
 class XMLList {
 
+    #items;
+
     constructor(items = []) {
-        this.__items = items;
+        this.#items = items;
     }
 
     get length() {
-        return this.__items.length;
+        return this.#items.length;
     }
 
     toString() {
-        return this.__items.map((item) => (item instanceof XML ? item.toString() : String(item))).join("");
+        return this.#items.map((item) => (item instanceof XML ? item.toString() : String(item))).join("");
     }
 
     child(name) {
-        return new XMLList(this.__items.flatMap((item) => XMLNodes.childElements(item.__node, name)));
+        return new XMLList(this.#items.flatMap((item) => XMLNodes.childElements(item.__node, name)));
     }
 
     attribute(name) {
-        return this.__items[0]?.attribute?.(name);
+        return this.#items[0]?.attribute?.(name);
     }
 
     text() {
-        return new XMLList(this.__items.map((item) => item.__node?.textContent ?? ""));
+        return new XMLList(this.#items.map((item) => item.__node?.textContent ?? ""));
     }
 }
 

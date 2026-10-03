@@ -117,25 +117,25 @@ class Domain {
         return () => console.warn(`[player] closure ${index} is not implemented`);
     }
 
-    __keys(object) {
+    #keys(object) {
         return object === null || object === undefined ? [] : Object.keys(object);
     }
 
     __hasNext(object, index) {
-        return index < this.__keys(object).length ? index + 1 : 0;
+        return index < this.#keys(object).length ? index + 1 : 0;
     }
 
     __hasNext2(object, index) {
-        const length = this.__keys(object).length;
+        const length = this.#keys(object).length;
         return [index < length ? index + 1 : 0, index < length];
     }
 
     __nextName(object, index) {
-        return this.__keys(object)[index - 1] ?? null;
+        return this.#keys(object)[index - 1] ?? null;
     }
 
     __nextValue(object, index) {
-        return object?.[this.__keys(object)[index - 1]] ?? null;
+        return object?.[this.#keys(object)[index - 1]] ?? null;
     }
 
     // The object owning `name` in scope: the instance (or its class statics) when
