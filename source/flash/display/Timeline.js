@@ -25,6 +25,9 @@ class Timeline {
     static #placements = new WeakMap();
     // Instances whose linked timeline is already built.
     static #bound = new WeakSet();
+    // The placement values last written to a child, so re-running a frame does
+    // not clobber transforms a frame script (or constructor) set by hand.
+    static #applied = new WeakMap();
 
     // `domain` is the movie the clip belongs to: it resolves the characters the
     // clip places and the classes linked to them.
@@ -328,8 +331,17 @@ class Timeline {
     }
 
     static #applyTransform(child, state) {
+        let applied = Timeline.#applied.get(child);
+        if (!applied) {
+            applied = {};
+            Timeline.#applied.set(child, applied);
+        }
         const matrix = state.matrix;
-        if (matrix) {
+        // A placement only affects a field when the timeline carries a *new*
+        // value: re-applying the same placement (a re-built frame) must not undo
+        // what a frame script changed.
+        if (matrix && applied.matrix !== matrix) {
+            applied.matrix = matrix;
             const a = matrix.scaleX;
             const b = matrix.rotateSkew0;
             const c = matrix.rotateSkew1;
@@ -340,14 +352,24 @@ class Timeline {
             child.scaleY = Math.hypot(c, d) * (a * d - b * c < 0 ? -1 : 1);
             child.rotation = (Math.atan2(b, a) * 180) / Math.PI;
         }
-        if (state.colorTransform) {
+        if (state.colorTransform && applied.colorTransform !== state.colorTransform) {
+            applied.colorTransform = state.colorTransform;
             child.colorTransform = state.colorTransform;
             // The alpha multiplier of a placement is the object's `alpha`.
             child.alpha = (state.colorTransform.alphaMult ?? 256) / 256;
         }
-        if (state.name) child.name = state.name;
-        if (state.blendMode && state.blendMode !== "normal") child.blendMode = state.blendMode;
-        if (state.visible === false) child.visible = false;
+        if (state.name && applied.name !== state.name) {
+            applied.name = state.name;
+            child.name = state.name;
+        }
+        if (state.blendMode && state.blendMode !== "normal" && applied.blendMode !== state.blendMode) {
+            applied.blendMode = state.blendMode;
+            child.blendMode = state.blendMode;
+        }
+        if (state.visible === false && applied.visible !== false) {
+            applied.visible = false;
+            child.visible = false;
+        }
     }
     // A class linked to a timeline character by a SymbolClass entry materializes
     // that character's children when it is constructed, before its own

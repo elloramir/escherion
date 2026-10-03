@@ -3,6 +3,7 @@ import Matrix from "../geom/Matrix.js";
 import Point from "../geom/Point.js";
 import Rectangle from "../geom/Rectangle.js";
 import Transform from "../geom/Transform.js";
+import Bounds from "./Bounds.js";
 
 let autoName = 0;
 
@@ -15,8 +16,6 @@ class DisplayObject extends EventDispatcher {
     static #placing = null;
 
     #parent = null;
-    #width = 0;
-    #height = 0;
     #transform = null;
 
     // Runs `create` so that the display object it constructs already has `parent` set when its
@@ -74,20 +73,24 @@ class DisplayObject extends EventDispatcher {
         this.#parent = value;
     }
 
+    // Flash computes width/height from the content bounds of the object in its
+    // parent's coordinate space, and a setter rescales the object to match.
     get width() {
-        return this.#width;
+        const box = Bounds.parentSpaceBounds(this);
+        return box ? box.x1 - box.x0 : 0;
     }
 
     set width(value) {
-        this.#width = Number(value) || 0;
+        DisplayObject.#resize(this, "scaleX", value);
     }
 
     get height() {
-        return this.#height;
+        const box = Bounds.parentSpaceBounds(this);
+        return box ? box.y1 - box.y0 : 0;
     }
 
     set height(value) {
-        this.#height = Number(value) || 0;
+        DisplayObject.#resize(this, "scaleY", value);
     }
 
     get stage() {
@@ -147,23 +150,24 @@ class DisplayObject extends EventDispatcher {
     }
 
     hitTestObject(other) {
-        const mine = this.#globalBox();
-        const theirs = other ? other.#globalBox?.() ?? null : null;
+        const mine = DisplayObject.globalBounds(this);
+        const theirs = other ? DisplayObject.globalBounds(other) : null;
         if (!mine || !theirs) return false;
-        return mine.left < theirs.right && theirs.left < mine.right
-            && mine.top < theirs.bottom && theirs.top < mine.bottom;
+        return mine.x0 < theirs.x1 && theirs.x0 < mine.x1
+            && mine.y0 < theirs.y1 && theirs.y0 < mine.y1;
     }
 
     hitTestPoint(x, y, shapeFlag = false) {
-        // Bounding-box test; the shape-accurate variant needs the renderer.
+        // Bounding-box test; the shape-accurate variant is the input router's.
         void shapeFlag;
-        const inverse = DisplayObject.invertMatrix(DisplayObject.worldMatrix(this));
-        const localX = x * inverse.a + y * inverse.c + inverse.tx;
-        const localY = x * inverse.b + y * inverse.d + inverse.ty;
-        return localX >= 0 && localX <= this.#width && localY >= 0 && localY <= this.#height;
+        const box = DisplayObject.globalBounds(this);
+        if (!box) return false;
+        return x >= box.x0 && x <= box.x1 && y >= box.y0 && y <= box.y1;
     }
 
     #boundsOf(targetCoordinateSpace) {
+        const local = Bounds.nodeBounds(this);
+        if (!local) return new Rectangle(0, 0, 0, 0);
         let matrix = DisplayObject.worldMatrix(this);
         if (targetCoordinateSpace) {
             matrix = DisplayObject.multiplyMatrix(
@@ -171,12 +175,27 @@ class DisplayObject extends EventDispatcher {
                 matrix,
             );
         }
-        return DisplayObject.transformBox(matrix, this.#width, this.#height);
+        const box = Bounds.transformBox({ a: matrix.a, b: matrix.b, c: matrix.c, d: matrix.d, tx: matrix.tx, ty: matrix.ty }, local);
+        return new Rectangle(box.x0, box.y0, box.x1 - box.x0, box.y1 - box.y0);
     }
 
-    #globalBox() {
-        const matrix = DisplayObject.worldMatrix(this);
-        return DisplayObject.transformBox(matrix, this.#width, this.#height);
+    static globalBounds(instance) {
+        const local = Bounds.nodeBounds(instance);
+        if (!local) return null;
+        const matrix = DisplayObject.worldMatrix(instance);
+        return Bounds.transformBox({ a: matrix.a, b: matrix.b, c: matrix.c, d: matrix.d, tx: matrix.tx, ty: matrix.ty }, local);
+    }
+
+    // Applies a width/height assignment by scaling the object (Flash semantics).
+    static #resize(instance, scaleName, value) {
+        if (!Number.isFinite(value) || value < 0) return;
+        const box = Bounds.parentSpaceBounds(instance);
+        if (!box) return;
+        const current = scaleName === "scaleX" ? box.x1 - box.x0 : box.y1 - box.y0;
+        if (current <= 0) return;
+        const scale = Number(instance[scaleName]);
+        const base = Number.isFinite(scale) && scale !== 0 ? scale : 1;
+        instance[scaleName] = base * (value / current);
     }
 
     toString() {
